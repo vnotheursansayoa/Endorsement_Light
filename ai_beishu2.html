@@ -389,8 +389,8 @@
                     @touchstart.prevent="startRecording" @touchend.prevent="stopRecording"
                     :disabled="isRecording || loadingTranscribe"
                     :class="['relative w-32 h-32 rounded-full font-bold text-lg transition-all shadow-lg',
-                            isRecording 
-                              ? 'bg-red-500 text-white breathing ripple-effect' 
+                            isRecording
+                              ? 'bg-red-500 text-white breathing ripple-effect'
                               : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:scale-105']">
               <div v-if="isRecording" class="flex flex-col items-center justify-center h-full">
                 <div class="flex items-end gap-1 mb-2">
@@ -407,6 +407,22 @@
             <p v-if="!isRecording && !loadingTranscribe" class="text-sm text-gray-400 mt-2">
               按住按钮开始背诵，松开自动停止
             </p>
+          </div>
+
+          <!-- 备用手动输入 -->
+          <div class="mb-6">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-gray-400 text-sm">— 或 —</span>
+            </div>
+            <div class="flex gap-2">
+              <input v-model="manualText" type="text" placeholder="语音识别效果不好？直接输入背诵内容"
+                     class="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all">
+              <button @click="submitManualText"
+                      :disabled="!manualText.trim() || loadingTranscribe"
+                      class="px-6 py-3 bg-gray-600 text-white rounded-xl font-medium hover:bg-gray-700 transition-all disabled:opacity-50">
+                比对
+              </button>
+            </div>
           </div>
 
           <!-- 加载状态 -->
@@ -513,6 +529,7 @@
         const diffResult = ref('');
         const isCorrect = ref(false);
         const loadingJudge = ref(false);
+        const manualText = ref('');
         
         // Toast
         const toasts = ref([]);
@@ -861,6 +878,14 @@ ${inputText.value}`
           }).join('');
         }
 
+        // ==================== 手动输入文本对比 ====================
+        function submitManualText() {
+          if (!manualText.value.trim() || !currentChunk.value) return;
+          recognizedText.value = manualText.value.trim();
+          compareTexts();
+          manualText.value = '';
+        }
+
         // ==================== 记忆判定 ====================
         async function judge(level) {
           if (!currentChunk.value) return;
@@ -1018,6 +1043,8 @@ ${inputText.value}`
           startRecording,
           stopRecording,
           compareTexts,
+          manualText,
+          submitManualText,
           judge,
           skipChunk,
           loadNextChunk
