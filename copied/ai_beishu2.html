@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 智能背书 - 艾宾浩斯记忆助手</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Tailwind 基础样式 */
+    *, ::before, ::after { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    
+    /* 呼吸动画 */
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.9; }
+    }
+    .breathing { animation: breathe 1.5s ease-in-out infinite; }
+    
+    /* 波纹动画 */
+    @keyframes ripple {
+      0% { transform: scale(1); opacity: 0.6; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
+    .ripple-effect::before {
+      content: ''; position: absolute; inset: 0; border-radius: inherit;
+      background: currentColor; opacity: 0.4;
+      animation: ripple 1.2s ease-out infinite;
+    }
+    
+    /* 录音波纹 */
+    @keyframes wave {
+      0%, 100% { height: 8px; }
+      50% { height: 24px; }
+    }
+    .wave-bar { animation: wave 0.5s ease-in-out infinite; }
+    .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+    .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+    .wave-bar:nth-child(4) { animation-delay: 0.3s; }
+    .wave-bar:nth-child(5) { animation-delay: 0.4s; }
+    
+    /* Toast 动画 */
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .toast-enter { animation: slideIn 0.3s ease-out; }
+    
+    /* 渐入动画 */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.4s ease-out; }
+    
+    /* 加载旋转 */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
+    
+    /* 进度条动画 */
+    @keyframes progress {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 100% 50%; }
+    }
+    .loading-bar {
+      background: linear-gradient(90deg, #a7f3d0, #6ee7b7, #a7f3d0);
+      background-size: 200% 100%;
+      animation: progress 1.5s ease-in-out infinite;
+    }
+    
+    /* 卡片悬停 */
+    .card-hover { transition: all 0.3s ease; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 40px -10px rgba(0,0,0,0.15); }
+    
+    /* 按钮禁用状态 */
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    /* 滚动条美化 */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 min-h-screen">
+  <div id="app">
+    <!-- Toast 通知系统 -->
+    <div class="fixed top-4 right-4 z-50 space-y-2">
+      <div v-for="(toast, i) in toasts" :key="toast.id"
+           :class="['toast-enter px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 max-w-sm',
+                    toast.type === 'error' ? 'bg-red-100 text-red-700 border border-red-200' :
+                    toast.type === 'success' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                    'bg-blue-100 text-blue-700 border border-blue-200']">
+        <span v-if="toast.type === 'error'">⚠️</span>
+        <span v-else-if="toast.type === 'success'">✅</span>
+        <span v-else>ℹ️</span>
+        <span class="text-sm">{{ toast.message }}</span>
+      </div>
+    </div>
+
+    <!-- 顶部导航 -->
+    <header class="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <h1 class="text-xl font-bold text-emerald-700 flex items-center gap-2">
+          <span class="text-2xl">🧠</span> AI 智能背书
+        </h1>
+        <div class="flex gap-2">
+          <button @click="currentPage = 'settings'"
+                  :class="['px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                          currentPage === 'settings' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
+            ⚙️ 设置
+          </button>
+          <button @click="currentPage = 'chunks'"
+                  :class="['px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                          currentPage === 'chunks' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
+            📚 词库
+          </button>
+          <button @click="currentPage = 'review'"
+                  :class="['px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                          currentPage === 'review' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
+            🎯 复习
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="max-w-4xl mx-auto px-4 py-8">
+      
+      <!-- ==================== 设置页面 ==================== -->
+      <div v-if="currentPage === 'settings'" class="fade-up">
+        <div class="bg-white rounded-2xl shadow-lg p-6 card-hover">
+          <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            🔧 API 配置
+          </h2>
+          
+          <!-- 配置说明 -->
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+            <p class="text-sm text-blue-800">
+              💡 <strong>提示：</strong>本应用支持任意兼容 OpenAI API 格式的中转服务（如 OpenAI、Azure、其他 LLM 服务）。
+              请确保 API Key 有效且余额充足。
+            </p>
+          </div>
+
+          <!-- LLM 配置 -->
+          <div class="mb-8">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+              📝 文本拆解 (LLM)
+            </h3>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">API 地址</label>
+                <input v-model="config.llmBaseUrl" type="text" placeholder="https://api.openai.com/v1"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">模型名称</label>
+                <input v-model="config.llmModel" type="text" placeholder="gpt-4o-mini"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-600 mb-1">API Key</label>
+                <input v-model="config.llmApiKey" type="password" placeholder="sk-..."
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all">
+              </div>
+            </div>
+          </div>
+
+          <!-- Whisper 配置 -->
+          <div class="mb-8">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+              🎤 语音识别 (Whisper)
+            </h3>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">API 地址</label>
+                <input v-model="config.audioBaseUrl" type="text" placeholder="https://api.openai.com/v1"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">模型名称</label>
+                <input v-model="config.audioModel" type="text" placeholder="whisper-1"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-600 mb-1">API Key</label>
+                <input v-model="config.audioApiKey" type="password" placeholder="sk-..."
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all">
+              </div>
+            </div>
+          </div>
+
+          <!-- 保存按钮 -->
+          <div class="flex justify-end">
+            <button @click="saveConfig" :disabled="savingConfig"
+                    class="px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-all flex items-center gap-2 disabled:opacity-50">
+              <span v-if="savingConfig" class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span v-else>💾</span>
+              {{ savingConfig ? '保存中...' : '保存配置' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== 词库页面 ==================== -->
+      <div v-else-if="currentPage === 'chunks'" class="fade-up">
+        <div class="bg-white rounded-2xl shadow-lg p-6">
+          <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            📚 文本导入与拆分
+          </h2>
+
+          <!-- 统计卡片 -->
+          <div v-if="chunks.length > 0" class="grid grid-cols-4 gap-3 mb-6">
+            <div class="bg-blue-50 rounded-xl p-3 text-center">
+              <div class="text-2xl font-bold text-blue-600">{{ chunks.length }}</div>
+              <div class="text-xs text-blue-600">总句子</div>
+            </div>
+            <div class="bg-gray-50 rounded-xl p-3 text-center">
+              <div class="text-2xl font-bold text-gray-600">{{ getChunksByStatus('new').length }}</div>
+              <div class="text-xs text-gray-600">待学习</div>
+            </div>
+            <div class="bg-yellow-50 rounded-xl p-3 text-center">
+              <div class="text-2xl font-bold text-yellow-600">{{ getChunksByStatus('learning').length }}</div>
+              <div class="text-xs text-yellow-600">学习中</div>
+            </div>
+            <div class="bg-emerald-50 rounded-xl p-3 text-center">
+              <div class="text-2xl font-bold text-emerald-600">{{ getChunksByStatus('graduated').length }}</div>
+              <div class="text-xs text-emerald-600">已掌握</div>
+            </div>
+          </div>
+
+          <!-- 文本输入区 -->
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-600 mb-2">粘贴要背诵的文本</label>
+            <textarea v-model="inputText" 
+                      placeholder="请在此粘贴你想要背诵的文本内容...&#10;&#10;AI 会自动将其拆解为适合背诵的短句，每句 10-25 个中文字符。"
+                      class="w-full h-48 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-none text-base leading-relaxed"
+                      :disabled="loadingSplit"></textarea>
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="flex items-center gap-4">
+            <button @click="splitText" :disabled="loadingSplit || !inputText.trim()"
+                    class="px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-all flex items-center gap-2 disabled:opacity-50">
+              <span v-if="loadingSplit" class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span v-else>✨</span>
+              {{ loadingSplit ? 'AI 拆解中...' : 'AI 智能分句' }}
+            </button>
+            
+            <button v-if="chunks.length > 0" @click="clearChunks"
+                    class="px-4 py-2 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition-all text-sm">
+              🗑️ 清空词库
+            </button>
+          </div>
+
+          <!-- 加载进度 -->
+          <div v-if="loadingSplit" class="mt-4">
+            <div class="bg-gray-100 rounded-full h-2 overflow-hidden">
+              <div class="h-full loading-bar rounded-full" style="width: 100%"></div>
+            </div>
+            <p class="text-sm text-gray-500 mt-2">正在调用 AI 进行智能分句，请稍候...</p>
+          </div>
+
+          <!-- 词库列表 -->
+          <div v-if="chunks.length > 0" class="mt-8">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">📖 词库预览</h3>
+            <div class="space-y-2 max-h-96 overflow-y-auto pr-2">
+              <div v-for="(chunk, i) in chunks" :key="chunk.id"
+                   class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all">
+                <span :class="['w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5',
+                                chunk.status === 'new' ? 'bg-gray-300 text-gray-600' :
+                                chunk.status === 'learning' ? 'bg-yellow-400 text-yellow-800' :
+                                chunk.status === 'reviewing' ? 'bg-blue-400 text-blue-800' :
+                                'bg-emerald-400 text-emerald-800']">
+                  {{ i + 1 }}
+                </span>
+                <div class="flex-1">
+                  <p class="text-gray-800">{{ chunk.text }}</p>
+                  <p class="text-xs text-gray-400 mt-1">
+                    {{ chunk.status === 'new' ? '待学习' :
+                       chunk.status === 'learning' ? '学习中' :
+                       chunk.status === 'reviewing' ? '复习中' : '已掌握' }}
+                    · 错误 {{ chunk.errorCount }} 次
+                  </p>
+                </div>
+                <button @click="deleteChunk(chunk.id)" class="text-gray-400 hover:text-red-500 transition-colors p-1">
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 空状态 -->
+          <div v-else class="text-center py-12 text-gray-400">
+            <div class="text-5xl mb-4">📝</div>
+            <p>粘贴文本后点击"AI 智能分句"开始</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== 复习页面 ==================== -->
+      <div v-else-if="currentPage === 'review'" class="fade-up">
+        
+        <!-- 开始复习 -->
+        <div v-if="!currentChunk && !loadingReview" class="bg-white rounded-2xl shadow-lg p-12 text-center card-hover">
+          <div class="text-6xl mb-6">🎯</div>
+          <h2 class="text-2xl font-bold text-gray-800 mb-2">准备开始复习</h2>
+          <p class="text-gray-500 mb-8">
+            共 {{ chunks.length }} 条内容，
+            <span class="text-emerald-600 font-bold">{{ getReviewCount() }}</span> 条需要复习
+          </p>
+          
+          <button v-if="getReviewCount() > 0" @click="loadNextChunk"
+                  class="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-bold text-lg hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200">
+            🚀 开始复习
+          </button>
+          <div v-else class="inline-block px-8 py-4 bg-emerald-100 text-emerald-700 rounded-2xl font-bold">
+            ✅ 当前无需复习，太棒了！
+          </div>
+        </div>
+
+        <!-- 复习卡片 -->
+        <div v-else-if="currentChunk" class="bg-white rounded-2xl shadow-lg p-8 card-hover">
+          
+          <!-- 进度条 -->
+          <div class="flex items-center gap-3 mb-6">
+            <div class="flex-1 bg-gray-100 rounded-full h-2">
+              <div class="h-full bg-emerald-500 rounded-full transition-all"
+                   :style="{ width: (reviewIndex / getReviewCount() * 100) + '%' }"></div>
+            </div>
+            <span class="text-sm text-gray-500">{{ reviewIndex + 1 }}/{{ getReviewCount() }}</span>
+          </div>
+
+          <!-- 状态指示 -->
+          <div class="flex items-center gap-2 mb-4">
+            <span :class="['px-3 py-1 rounded-full text-xs font-medium',
+                            currentChunk.status === 'new' ? 'bg-gray-200 text-gray-600' :
+                            currentChunk.status === 'learning' ? 'bg-yellow-100 text-yellow-700' :
+                            currentChunk.status === 'reviewing' ? 'bg-blue-100 text-blue-700' :
+                            'bg-emerald-100 text-emerald-700']">
+              {{ currentChunk.status === 'new' ? '🆕 待学习' :
+                 currentChunk.status === 'learning' ? '📖 学习中' :
+                 currentChunk.status === 'reviewing' ? '🔄 复习中' : '✅ 已掌握' }}
+            </span>
+            <span class="text-xs text-gray-400">
+              错误 {{ currentChunk.errorCount }} 次 · 间隔 {{ formatInterval(currentChunk.interval) }}
+            </span>
+          </div>
+
+          <!-- 上一句提示 -->
+          <div v-if="previewText" class="mb-4">
+            <p class="text-sm text-gray-500">上一句结尾：</p>
+            <p class="text-emerald-700 font-medium text-lg">{{ previewText }}</p>
+          </div>
+
+          <!-- 句子内容区 -->
+          <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 mb-6 min-h-[120px] flex items-center justify-center">
+            <div class="text-center">
+              <!-- 隐藏状态 -->
+              <div v-if="revealState === 'hidden'">
+                <p class="text-gray-400 text-lg mb-4">🎧 盲背模式</p>
+                <button @click="revealState = 'partial'"
+                        class="px-6 py-2 bg-white text-emerald-600 rounded-xl font-medium hover:bg-emerald-50 transition-all shadow">
+                  👁️ 查看提示
+                </button>
+              </div>
+              
+              <!-- 部分显示 -->
+              <div v-else-if="revealState === 'partial'">
+                <p v-html="maskedText" class="text-2xl font-bold text-gray-800 leading-relaxed"></p>
+                <button @click="revealState = 'full'"
+                        class="mt-4 px-4 py-2 bg-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-300 transition-all">
+                  展开全文
+                </button>
+              </div>
+              
+              <!-- 全显示 -->
+              <div v-else>
+                <p class="text-2xl font-bold text-emerald-700 leading-relaxed">{{ currentChunk.text }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 录音按钮 -->
+          <div class="text-center mb-6">
+            <button @mousedown="startRecording" @mouseup="stopRecording"
+                    @mouseleave="stopRecording"
+                    @touchstart.prevent="startRecording" @touchend.prevent="stopRecording"
+                    :disabled="isRecording || loadingTranscribe"
+                    :class="['relative w-32 h-32 rounded-full font-bold text-lg transition-all shadow-lg',
+                            isRecording 
+                              ? 'bg-red-500 text-white breathing ripple-effect' 
+                              : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:scale-105']">
+              <div v-if="isRecording" class="flex flex-col items-center justify-center h-full">
+                <div class="flex items-end gap-1 mb-2">
+                  <div class="wave-bar w-1 bg-white rounded-full"></div>
+                  <div class="wave-bar w-1 bg-white rounded-full"></div>
+                  <div class="wave-bar w-1 bg-white rounded-full"></div>
+                  <div class="wave-bar w-1 bg-white rounded-full"></div>
+                  <div class="wave-bar w-1 bg-white rounded-full"></div>
+                </div>
+                <span>录音中</span>
+              </div>
+              <span v-else>🎤<br>按住录音</span>
+            </button>
+            <p v-if="!isRecording && !loadingTranscribe" class="text-sm text-gray-400 mt-2">
+              按住按钮开始背诵，松开自动停止
+            </p>
+          </div>
+
+          <!-- 加载状态 -->
+          <div v-if="loadingTranscribe" class="text-center py-4">
+            <div class="inline-flex items-center gap-2 text-gray-500">
+              <span class="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></span>
+              正在识别语音...
+            </div>
+          </div>
+
+          <!-- 识别结果与对比 -->
+          <div v-if="recognizedText" class="bg-gray-50 rounded-xl p-6 mb-6">
+            <h4 class="font-semibold text-gray-700 mb-3">📝 识别结果</h4>
+            <p class="text-gray-800 mb-4">"{{ recognizedText }}"</p>
+            
+            <h4 class="font-semibold text-gray-700 mb-3">🔍 对比结果</h4>
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <p v-html="diffResult" class="text-lg leading-relaxed"></p>
+            </div>
+            
+            <p v-if="!isCorrect" class="text-sm text-red-500 mt-2">
+              ✕ 有差异，请根据对比结果选择记忆判定
+            </p>
+            <p v-else class="text-sm text-emerald-600 mt-2">
+              ✓ 完全正确！
+            </p>
+          </div>
+
+          <!-- 判定按钮 -->
+          <div v-if="recognizedText" class="grid grid-cols-3 gap-4">
+            <button @click="judge('forgot')" :disabled="loadingJudge"
+                    class="p-4 bg-red-50 border-2 border-red-200 rounded-xl hover:bg-red-100 transition-all group">
+              <div class="text-3xl mb-2">🔴</div>
+              <div class="font-medium text-red-700">全忘了 / 错很多</div>
+              <div class="text-xs text-red-500 mt-1">→ 1分钟后复习</div>
+            </button>
+            
+            <button @click="judge('stumbled')" :disabled="loadingJudge"
+                    class="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl hover:bg-yellow-100 transition-all group">
+              <div class="text-3xl mb-2">🟡</div>
+              <div class="font-medium text-yellow-700">想了很久 / 结巴</div>
+              <div class="text-xs text-yellow-500 mt-1">→ {{ formatInterval(Math.max(5, currentChunk.interval * 1.5)) }}</div>
+            </button>
+            
+            <button @click="judge('perfect')" :disabled="loadingJudge"
+                    class="p-4 bg-emerald-50 border-2 border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all group">
+              <div class="text-3xl mb-2">🟢</div>
+              <div class="font-medium text-emerald-700">脱口而出 / 全对</div>
+              <div class="text-xs text-emerald-500 mt-1">→ {{ formatInterval(Math.max(15, currentChunk.interval * 2.5)) }}</div>
+            </button>
+          </div>
+
+          <!-- 跳过按钮 -->
+          <div class="mt-4 text-center">
+            <button @click="skipChunk" class="text-gray-400 hover:text-gray-600 text-sm transition-colors">
+              ⏭️ 跳过此句
+            </button>
+          </div>
+        </div>
+
+        <!-- 加载中 -->
+        <div v-if="loadingReview" class="bg-white rounded-2xl shadow-lg p-12 text-center">
+          <div class="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p class="text-gray-500">加载下一条...</p>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    const { createApp, ref, reactive, computed, onMounted, onUnmounted, nextTick } = Vue;
+
+    createApp({
+      setup() {
+        // 状态
+        const currentPage = ref('review');
+        const config = reactive({
+          llmBaseUrl: 'https://api.openai.com/v1',
+          llmApiKey: '',
+          llmModel: 'gpt-4o-mini',
+          audioBaseUrl: 'https://api.openai.com/v1',
+          audioApiKey: '',
+          audioModel: 'whisper-1'
+        });
+        
+        const chunks = ref([]);
+        const inputText = ref('');
+        const loadingSplit = ref(false);
+        const savingConfig = ref(false);
+        
+        // 复习相关
+        const currentChunk = ref(null);
+        const reviewIndex = ref(0);
+        const loadingReview = ref(false);
+        const previewText = ref('');
+        const revealState = ref('hidden');
+        const maskedText = ref('');
+        
+        // 录音相关
+        const isRecording = ref(false);
+        const loadingTranscribe = ref(false);
+        const recognizedText = ref('');
+        const diffResult = ref('');
+        const isCorrect = ref(false);
+        const loadingJudge = ref(false);
+        
+        // Toast
+        const toasts = ref([]);
+        let toastId = 0;
+        
+        // 录音
+        let mediaRecorder = null;
+        let audioChunks = [];
+        
+        // ==================== 工具函数 ====================
+        function showToast(message, type = 'info') {
+          const id = ++toastId;
+          toasts.value.push({ id, message, type });
+          setTimeout(() => {
+            const idx = toasts.value.findIndex(t => t.id === id);
+            if (idx > -1) toasts.value.splice(idx, 1);
+          }, 3000);
+        }
+
+        function generateId() {
+          return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        function formatInterval(minutes) {
+          if (minutes < 60) return minutes + '分钟';
+          if (minutes < 1440) return Math.round(minutes / 60) + '小时';
+          return Math.round(minutes / 1440) + '天';
+        }
+
+        function normalizeText(text) {
+          return text.replace(/[\s，。！？、；：""''【】《》（）.,!?;:'"()\[\]{}]/g, '').trim();
+        }
+
+        function getChunksByStatus(status) {
+          return chunks.value.filter(c => c.status === status);
+        }
+
+        function getReviewCount() {
+          const now = Date.now();
+          return chunks.value.filter(c => c.nextReviewTime <= now).length;
+        }
+
+        function loadChunks() {
+          try {
+            const data = localStorage.getItem('ai-endorser-chunks');
+            if (data) chunks.value = JSON.parse(data);
+          } catch (e) {
+            console.error('Failed to load chunks:', e);
+          }
+        }
+
+        function saveChunks() {
+          localStorage.setItem('ai-endorser-chunks', JSON.stringify(chunks.value));
+        }
+
+        function loadConfig() {
+          try {
+            const data = localStorage.getItem('ai-endorser-config');
+            if (data) {
+              const saved = JSON.parse(data);
+              Object.assign(config, saved);
+            }
+          } catch (e) {
+            console.error('Failed to load config:', e);
+          }
+        }
+
+        function saveConfigToStorage() {
+          localStorage.setItem('ai-endorser-config', JSON.stringify(config));
+        }
+
+        function maskText(text) {
+          if (!text) return '';
+          if (text.length <= 4) return text;
+          const keep = 2;
+          const masked = '█'.repeat(text.length - keep * 2);
+          return text.slice(0, keep) + masked + text.slice(-keep);
+        }
+
+        // ==================== AI 分句 ====================
+        async function splitText() {
+          if (!inputText.value.trim()) {
+            showToast('请输入要拆分的文本', 'error');
+            return;
+          }
+          
+          if (!config.llmApiKey) {
+            showToast('请先配置 API Key', 'error');
+            return;
+          }
+
+          loadingSplit.value = true;
+          
+          try {
+            const response = await fetch(config.llmBaseUrl + '/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + config.llmApiKey
+              },
+              body: JSON.stringify({
+                model: config.llmModel,
+                messages: [{
+                  role: 'user',
+                  content: `请将以下文本拆解为适合背诵的单句或小句群。要求：
+1. 每块 10-25 个中文字符
+2. 保持逻辑连贯
+3. 句子的起止应该自然
+
+请严格返回 JSON 格式，结构如下（不要有任何其他内容）：
+{
+  "chunks": ["句子1", "句子2", "句子3", ...]
+}
+
+要拆分的文本：
+${inputText.value}`
+                }],
+                temperature: 0.3
+              })
+            });
+
+            if (!response.ok) {
+              const err = await response.json().catch(() => ({}));
+              throw new Error(err.error?.message || `API 请求失败 (${response.status})`);
+            }
+
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content;
+            
+            if (!content) {
+              throw new Error('API 返回为空');
+            }
+
+            // 解析 JSON
+            let jsonStr = content.trim();
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) jsonStr = jsonMatch[0];
+            
+            const parsed = JSON.parse(jsonStr);
+            const newChunks = (parsed.chunks || []).map(text => ({
+              id: generateId(),
+              text: text,
+              status: 'new',
+              interval: 5,
+              nextReviewTime: Date.now(),
+              errorCount: 0
+            }));
+
+            if (newChunks.length === 0) {
+              throw new Error('未能解析出有效的句子');
+            }
+
+            chunks.value = newChunks;
+            saveChunks();
+            inputText.value = '';
+            showToast(`成功拆分为 ${newChunks.length} 条内容`, 'success');
+            currentPage.value = 'chunks';
+            
+          } catch (e) {
+            console.error('Split error:', e);
+            showToast('拆分失败：' + e.message, 'error');
+          } finally {
+            loadingSplit.value = false;
+          }
+        }
+
+        // ==================== 录音功能 (WAV兼容版) ====================
+        let audioContext = null;
+        let audioInput = null;
+        let processor = null;
+        let pcmData =[];
+        let sampleRate = 44100;
+
+        // WAV 编码器
+        function encodeWAV(samples, sampleRate) {
+          const buffer = new ArrayBuffer(44 + samples.length * 2);
+          const view = new DataView(buffer);
+          const writeString = (view, offset, string) => {
+            for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+          };
+          writeString(view, 0, 'RIFF');
+          view.setUint32(4, 36 + samples.length * 2, true);
+          writeString(view, 8, 'WAVE');
+          writeString(view, 12, 'fmt ');
+          view.setUint32(16, 16, true);
+          view.setUint16(20, 1, true);
+          view.setUint16(22, 1, true); // 单声道
+          view.setUint32(24, sampleRate, true);
+          view.setUint32(28, sampleRate * 2, true);
+          view.setUint16(32, 2, true);
+          view.setUint16(34, 16, true);
+          writeString(view, 36, 'data');
+          view.setUint32(40, samples.length * 2, true);
+          let offset = 44;
+          for (let i = 0; i < samples.length; i++, offset += 2) {
+            let s = Math.max(-1, Math.min(1, samples[i]));
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+          }
+          return new Blob([view], { type: 'audio/wav' });
+        }
+
+        async function startRecording() {
+          if (isRecording.value) return;
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            sampleRate = audioContext.sampleRate;
+            audioInput = audioContext.createMediaStreamSource(stream);
+            
+            // 使用 ScriptProcessor 兼容截取音频流
+            processor = audioContext.createScriptProcessor(4096, 1, 1);
+            pcmData =[];
+            
+            processor.onaudioprocess = (e) => {
+              const channelData = e.inputBuffer.getChannelData(0);
+              pcmData.push(new Float32Array(channelData));
+            };
+            
+            audioInput.connect(processor);
+            processor.connect(audioContext.destination);
+            
+            isRecording.value = true;
+            recognizedText.value = '';
+            diffResult.value = '';
+            revealState.value = 'hidden';
+          } catch (e) {
+            console.error('Microphone error:', e);
+            if (e.name === 'NotAllowedError') {
+              showToast('麦克风权限被拒绝。请确保在 HTTPS 网站下访问！', 'error');
+            } else {
+              showToast('无法访问麦克风：' + e.message, 'error');
+            }
+          }
+        }
+
+        async function stopRecording() {
+          if (!isRecording.value || !processor) return;
+          isRecording.value = false;
+          
+          processor.disconnect();
+          audioInput.disconnect();
+          if (audioContext && audioContext.state !== 'closed') {
+            await audioContext.close();
+          }
+          
+          // 合并 PCM 数据
+          const length = pcmData.reduce((acc, val) => acc + val.length, 0);
+          if (length === 0) {
+            showToast('未录到音频，请重试', 'error');
+            return;
+          }
+          
+          const result = new Float32Array(length);
+          let offset = 0;
+          for (let i = 0; i < pcmData.length; i++) {
+            result.set(pcmData[i], offset);
+            offset += pcmData[i].length;
+          }
+          
+          // 生成 WAV 文件 Blob
+          const wavBlob = encodeWAV(result, sampleRate);
+          await transcribeAudio(wavBlob);
+        }
+
+        async function transcribeAudio(audioBlob) {
+          if (!config.audioApiKey) {
+            showToast('请先配置语音识别 API Key', 'error');
+            return;
+          }
+
+          loadingTranscribe.value = true;
+          try {
+            const formData = new FormData();
+            // 明确告诉 API 这是一个 .wav 文件
+            formData.append('file', audioBlob, 'recording.wav');
+            formData.append('model', config.audioModel);
+
+            const response = await fetch(config.audioBaseUrl + '/audio/transcriptions', {
+              method: 'POST',
+              headers: {
+                'Authorization': 'Bearer ' + config.audioApiKey
+              },
+              body: formData
+            });
+
+            if (!response.ok) {
+              const err = await response.json().catch(() => ({}));
+              throw new Error(err.error?.message || `语音识别失败 (${response.status})`);
+            }
+
+            const data = await response.json();
+            recognizedText.value = data.text || '';
+            
+            if (!recognizedText.value) {
+              showToast('未能识别到语音内容，请重试', 'error');
+              return;
+            }
+
+            compareTexts();
+          } catch (e) {
+            console.error('Transcribe error:', e);
+            showToast('语音识别失败：' + e.message, 'error');
+          } finally {
+            loadingTranscribe.value = false;
+          }
+        }
+
+        // ==================== 文本对比 ====================
+        function compareTexts() {
+          if (!currentChunk.value || !recognizedText.value) return;
+
+          const original = normalizeText(currentChunk.value.text);
+          const recognized = normalizeText(recognizedText.value);
+
+          const result = [];
+          let i = 0, j = 0;
+          let correct = true;
+
+          while (i < original.length || j < recognized.length) {
+            if (i < original.length && j < recognized.length && original[i] === recognized[j]) {
+              result.push({ char: original[i], type: 'correct' });
+              i++;
+              j++;
+            } else {
+              correct = false;
+              if (j < recognized.length && (i >= original.length || recognized[j] === recognized[j + 1])) {
+                result.push({ char: recognized[j], type: 'wrong' });
+                j++;
+              } else if (i < original.length) {
+                result.push({ char: original[i], type: 'missed' });
+                i++;
+              } else {
+                result.push({ char: recognized[j], type: 'extra' });
+                j++;
+              }
+            }
+          }
+
+          isCorrect.value = correct;
+          diffResult.value = result.map(r => {
+            if (r.type === 'correct') return r.char;
+            if (r.type === 'wrong') return `<span class="bg-red-200 text-red-700 line-through">${r.char}</span>`;
+            if (r.type === 'missed') return `<span class="bg-yellow-200 text-yellow-700 underline">${r.char}</span>`;
+            if (r.type === 'extra') return `<span class="bg-gray-200 text-gray-500">${r.char}</span>`;
+            return r.char;
+          }).join('');
+        }
+
+        // ==================== 记忆判定 ====================
+        async function judge(level) {
+          if (!currentChunk.value) return;
+          
+          loadingJudge.value = true;
+          
+          try {
+            const chunk = currentChunk.value;
+            let newInterval, newStatus;
+
+            switch (level) {
+              case 'forgot':
+                newInterval = 1;
+                chunk.errorCount++;
+                newStatus = 'learning';
+                break;
+              case 'stumbled':
+                newInterval = Math.max(5, chunk.interval * 1.5);
+                newStatus = 'learning';
+                break;
+              case 'perfect':
+                newInterval = Math.max(15, chunk.interval * 2.5);
+                newStatus = chunk.interval >= 1440 ? 'graduated' : 'reviewing';
+                break;
+            }
+
+            chunk.interval = newInterval;
+            chunk.status = newStatus;
+            chunk.nextReviewTime = Date.now() + newInterval * 60 * 1000;
+
+            saveChunks();
+            showToast('已记录，下次复习间隔 ' + formatInterval(newInterval), 'success');
+
+            recognizedText.value = '';
+            diffResult.value = '';
+            revealState.value = 'hidden';
+            
+            await loadNextChunk();
+            
+          } finally {
+            loadingJudge.value = false;
+          }
+        }
+
+        async function skipChunk() {
+          recognizedText.value = '';
+          diffResult.value = '';
+          revealState.value = 'hidden';
+          await loadNextChunk();
+        }
+
+        async function loadNextChunk() {
+          loadingReview.value = true;
+          currentChunk.value = null;
+          
+          try {
+            const now = Date.now();
+            const dueChunks = chunks.value
+              .filter(c => c.nextReviewTime <= now)
+              .sort((a, b) => a.nextReviewTime - b.nextReviewTime);
+
+            if (dueChunks.length === 0) {
+              currentChunk.value = null;
+              return;
+            }
+
+            const currentId = currentChunk.value?.id;
+            let nextIdx = dueChunks.findIndex(c => c.id === currentId) + 1;
+            if (nextIdx >= dueChunks.length) nextIdx = 0;
+
+            currentChunk.value = dueChunks[nextIdx];
+            reviewIndex.value = nextIdx;
+
+            const allDue = chunks.value.filter(c => c.nextReviewTime <= now);
+            const chunkIdx = allDue.findIndex(c => c.id === currentChunk.value.id);
+            if (chunkIdx > 0) {
+              const prev = allDue[chunkIdx - 1];
+              previewText.value = prev.text.slice(-8);
+            } else {
+              previewText.value = '';
+            }
+
+            maskedText.value = maskText(currentChunk.value.text);
+
+            recognizedText.value = '';
+            diffResult.value = '';
+            revealState.value = 'hidden';
+            
+          } finally {
+            loadingReview.value = false;
+          }
+        }
+
+        function saveConfig() {
+          savingConfig.value = true;
+          try {
+            saveConfigToStorage();
+            showToast('配置已保存', 'success');
+          } catch (e) {
+            showToast('保存失败：' + e.message, 'error');
+          } finally {
+            savingConfig.value = false;
+          }
+        }
+
+        function clearChunks() {
+          if (confirm('确定要清空所有内容吗？')) {
+            chunks.value = [];
+            saveChunks();
+            showToast('已清空词库', 'success');
+          }
+        }
+
+        function deleteChunk(id) {
+          chunks.value = chunks.value.filter(c => c.id !== id);
+          saveChunks();
+          showToast('已删除', 'success');
+        }
+
+        // ==================== 生命周期 ====================
+        onMounted(() => {
+          loadConfig();
+          loadChunks();
+        });
+
+        return {
+          currentPage,
+          config,
+          chunks,
+          inputText,
+          loadingSplit,
+          savingConfig,
+          currentChunk,
+          reviewIndex,
+          loadingReview,
+          previewText,
+          revealState,
+          maskedText,
+          isRecording,
+          loadingTranscribe,
+          recognizedText,
+          diffResult,
+          isCorrect,
+          loadingJudge,
+          toasts,
+          
+          showToast,
+          splitText,
+          saveConfig,
+          clearChunks,
+          deleteChunk,
+          getChunksByStatus,
+          getReviewCount,
+          formatInterval,
+          startRecording,
+          stopRecording,
+          compareTexts,
+          judge,
+          skipChunk,
+          loadNextChunk
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
